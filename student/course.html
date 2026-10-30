@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Course Portal | Lite-LMS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    </style>
+</head>
+
+<body class="h-full bg-slate-900 text-slate-100 flex flex-col justify-between selection:bg-brand-500 selection:text-white">
+
+    <!-- Top Navigation -->
+    <nav class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <a href="dashboard.html" class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-slate-300 transition flex items-center gap-1.5">
+                    &larr; <span>Back to Courses</span>
+                </a>
+                <span id="nav-course-code" class="font-extrabold text-base text-white tracking-tight">Loading...</span>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <span id="nav-user-name" class="text-xs font-semibold text-slate-300 hidden sm:inline">...</span>
+                <button onclick="logout()" class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-slate-300 transition">
+                    Log out
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-6 py-8 flex-grow w-full">
+        <!-- Course Header Card -->
+        <div class="p-6 sm:p-8 rounded-2xl bg-slate-800/50 border border-slate-700/60 mb-8 backdrop-blur shadow-xl">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-3 mb-2">
+                        <span id="badge-code" class="text-xs font-extrabold px-2.5 py-1 rounded-md bg-brand-500/20 text-brand-300 border border-brand-500/30">...</span>
+                        <span id="badge-level" class="text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-700/60 text-slate-300">...</span>
+                        <span id="badge-dept" class="text-xs text-slate-400">...</span>
+                    </div>
+                    <h1 id="course-title" class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Loading Course...</h1>
+                    <p id="course-lecturer" class="text-sm text-slate-400 mt-2">Lecturer: ...</p>
+                </div>
+                <!-- Attendance Quick Badge -->
+                <div id="attendance-status-card" class="p-4 rounded-xl bg-slate-900/80 border border-slate-700 min-w-[240px]">
+                    <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+                        <span>Attendance Window</span>
+                        <span id="session-pulse" class="w-2 h-2 rounded-full bg-slate-500"></span>
+                    </div>
+                    <p id="session-summary" class="text-sm font-bold text-slate-300">Checking session...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2 Column Layout: Left (Attendance + Materials), Right (Realtime Chat) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Left Column: Attendance & Materials (7 Cols) -->
+            <div class="lg:col-span-7 space-y-8">
+                
+                <!-- Attendance Check-In Card -->
+                <div class="p-6 rounded-2xl bg-slate-800/40 border border-slate-700/60 shadow-lg">
+                    <h2 class="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                        <span>📍</span> Mark Attendance
+                    </h2>
+                    <p class="text-xs text-slate-400 mb-5">
+                        When your lecturer initiates an attendance check-in window, enter the 5 to 6-character code below.
+                    </p>
+
+                    <!-- Active Session Form -->
+                    <div id="attendance-active-box" class="hidden">
+                        <div class="p-4 rounded-xl bg-brand-500/10 border border-brand-500/30 mb-4 flex items-center justify-between">
+                            <div>
+                                <span class="text-xs font-semibold text-brand-300 uppercase tracking-wider block">Session Open</span>
+                                <span id="countdown-timer" class="text-sm font-bold text-white">Closes soon</span>
+                            </div>
+                            <span class="text-2xl">⏳</span>
+                        </div>
+
+                        <form id="attendance-form" class="flex gap-3">
+                            <input type="text" id="attendance-code" required placeholder="Enter code (e.g. 8K2L9)" maxlength="10"
+                                class="flex-grow px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm uppercase tracking-widest font-mono focus:outline-none focus:border-brand-500">
+                            <button type="submit" id="mark-btn" class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-bold shadow-lg shadow-brand-600/30 transition">
+                                Check In
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Already Marked Box -->
+                    <div id="attendance-marked-box" class="hidden p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm flex items-center gap-3">
+                        <span class="text-xl">✅</span>
+                        <div>
+                            <p class="font-bold">You are checked in!</p>
+                            <p class="text-xs text-emerald-400/80">Your attendance has been recorded for the current lecture session.</p>
+                        </div>
+                    </div>
+
+                    <!-- No Active Session Box -->
+                    <div id="attendance-inactive-box" class="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-slate-400 text-xs text-center py-6">
+                        No active attendance window at the moment. Your lecturer will prompt you when a session begins.
+                    </div>
+                </div>
+
+                <!-- Course Materials Section -->
+                <div class="p-6 rounded-2xl bg-slate-800/40 border border-slate-700/60 shadow-lg">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                            <span>📚</span> Course Materials
+                        </h2>
+                        <span id="materials-count" class="text-xs text-slate-400">0 items</span>
+                    </div>
+
+                    <!-- Materials List Container -->
+                    <div id="materials-list" class="space-y-3">
+                        <div class="text-center py-8 text-slate-500 text-xs">Loading course materials...</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Right Column: Realtime Chat (5 Cols) -->
+            <div class="lg:col-span-5">
+                <div class="rounded-2xl bg-slate-800/50 border border-slate-700/60 flex flex-col h-[650px] shadow-xl overflow-hidden">
+                    <!-- Chat Header -->
+                    <div class="px-6 py-4 border-b border-slate-700/60 bg-slate-800/80 flex items-center justify-between">
+                        <div>
+                            <h3 class="font-bold text-white text-sm">Course Chat</h3>
+                            <p class="text-xs text-emerald-400 flex items-center gap-1.5 mt-0.5">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                Supabase Realtime Active
+                            </p>
+                        </div>
+                        <span class="text-xs text-slate-400">Enrolled Members</span>
+                    </div>
+
+                    <!-- Chat Messages Stream -->
+                    <div id="chat-messages" class="flex-grow p-4 overflow-y-auto space-y-3">
+                        <div class="text-center py-8 text-xs text-slate-500">Connecting to channel...</div>
+                    </div>
+
+                    <!-- Chat Input Box -->
+                    <form id="chat-form" class="p-3 border-t border-slate-700/60 bg-slate-900/60 flex gap-2">
+                        <input type="text" id="chat-input" required placeholder="Type a message to the class..."
+                            class="flex-grow px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-brand-500">
+                        <button type="submit" id="chat-send-btn" class="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold shadow transition">
+                            Send
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script src="../js/config.js"></script>
+    <script src="../js/auth.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const courseId = parseInt(urlParams.get('id'), 10);
+
+        let currentStudent = null;
+        let activeAttendanceSession = null;
+        let chatSubscription = null;
+
+        if (!courseId) {
+            window.location.href = 'dashboard.html';
+        }
+
+        async function initCoursePage() {
+            const authData = await requireAuth('student');
+            if (!authData) return;
+            currentStudent = authData.profile;
+
+            document.getElementById('nav-user-name').textContent = currentStudent.name;
+
+            // 1. Verify enrollment & load course details
+            const isEnrolled = await verifyAndLoadCourse();
+            if (!isEnrolled) {
+                alert("You are not enrolled in this course.");
+                window.location.href = 'dashboard.html';
+                return;
+            }
+
+            // 2. Load Materials
+            await loadMaterials();
+
+            // 3. Check Attendance Session
+            await checkAttendanceStatus();
+
+            // 4. Initialize Realtime Chat
+            initRealtimeChat();
+        }
+
+        async function verifyAndLoadCourse() {
+            try {
+                // Check enrollment
+                const { data: enrollment, error: enrollErr } = await supabase
+                    .from('enrollments')
+                    .select('id')
+                    .eq('course_id', courseId)
+                    .eq('student_id', currentStudent.id)
+                    .maybeSingle();
+
+                if (enrollErr || !enrollment) return false;
+
+                // Load course details
+                const { data: course, error: courseErr } = await supabase
+                    .from('courses')
+                    .select('*, departments(name), profiles!courses_lecturer_id_fkey(name)')
+                    .eq('id', courseId)
+                    .single();
+
+                if (courseErr || !course) return false;
+
+                // Populate UI
+                document.getElementById('nav-course-code').textContent = course.code;
+                document.getElementById('badge-code').textContent = course.code;
+                document.getElementById('badge-level').textContent = `${course.level} Level`;
+                document.getElementById('badge-dept').textContent = course.departments?.name || '';
+                document.getElementById('course-title').textContent = course.title;
+                document.getElementById('course-lecturer').textContent = `Lecturer: ${course.profiles?.name || 'Instructor'}`;
+
+                return true;
+            } catch (err) {
+                console.error("Course verification error:", err);
+                return false;
+            }
+        }
+
+        // ======================= ATTENDANCE LOGIC =======================
+        async function checkAttendanceStatus() {
+            const activeBox = document.getElementById('attendance-active-box');
+            const markedBox = document.getElementById('attendance-marked-box');
+            const inactiveBox = document.getElementById('attendance-inactive-box');
+            const summaryText = document.getElementById('session-summary');
+            const pulse = document.getElementById('session-pulse');
+
+            try {
+                const nowIso = new Date().toISOString();
+                const { data: session, error } = await supabase
+                    .from('attendance_sessions')
+                    .select('*')
+                    .eq('course_id', courseId)
+                    .eq('is_active', true)
+                    .gt('closes_at', nowIso)
+                    .order('opened_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (error) throw error;
+
+                if (!session) {
+                    activeBox.classList.add('hidden');
+                    markedBox.classList.add('hidden');
+                    inactiveBox.classList.remove('hidden');
+                    summaryText.textContent = "Closed";
+                    summaryText.className = "text-sm font-bold text-slate-400";
+                    pulse.className = "w-2 h-2 rounded-full bg-slate-500";
+                    return;
+                }
+
+                activeAttendanceSession = session;
+
+                // Check if already marked
+                const { data: record } = await supabase
+                    .from('attendance_records')
+                    .select('id')
+                    .eq('session_id', session.id)
+                    .eq('student_id', currentStudent.id)
+                    .maybeSingle();
+
+                if (record) {
+                    activeBox.classList.add('hidden');
+                    inactiveBox.classList.add('hidden');
+                    markedBox.classList.remove('hidden');
+                    summaryText.textContent = "Checked In";
+                    summaryText.className = "text-sm font-bold text-emerald-400";
+                    pulse.className = "w-2 h-2 rounded-full bg-emerald-400";
+                } else {
+                    inactiveBox.classList.add('hidden');
+                    markedBox.classList.add('hidden');
+                    activeBox.classList.remove('hidden');
+                    summaryText.textContent = "Open - Check In Now";
+                    summaryText.className = "text-sm font-bold text-amber-400 animate-pulse";
+                    pulse.className = "w-2 h-2 rounded-full bg-amber-400 animate-ping";
+
+                    // Countdown calculation
+                    const closeTime = new Date(session.closes_at).getTime();
+                    updateCountdown(closeTime);
+                }
+
+            } catch (err) {
+                console.error("Attendance check error:", err);
+            }
+        }
+
+        function updateCountdown(closeTime) {
+            const timerEl = document.getElementById('countdown-timer');
+            const interval = setInterval(() => {
+                const diff = closeTime - Date.now();
+                if (diff <= 0) {
+                    clearInterval(interval);
+                    timerEl.textContent = "Session has closed.";
+                    checkAttendanceStatus();
+                    return;
+                }
+                const mins = Math.floor(diff / 60000);
+                const secs = Math.floor((diff % 60000) / 1000);
+                timerEl.textContent = `Closes in ${mins}m ${secs}s`;
+            }, 1000);
+        }
+
+        document.getElementById('attendance-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const codeInput = document.getElementById('attendance-code');
+            const code = codeInput.value.trim().toUpperCase();
+
+            if (!activeAttendanceSession) {
+                showToast("No active session", "error");
+                return;
+            }
+
+            if (code !== activeAttendanceSession.code.toUpperCase()) {
+                showToast("Invalid attendance code. Please check with your lecturer.", "error");
+                return;
+            }
+
+            try {
+                const { error } = await supabase
+                    .from('attendance_records')
+                    .insert({
+                        session_id: activeAttendanceSession.id,
+                        student_id: currentStudent.id
+                    });
+
+                if (error) {
+                    if (error.code === '23505') { // unique violation
+                        showToast("You've already marked attendance for this session.", "info");
+                    } else {
+                        throw error;
+                    }
+                } else {
+                    showToast("Attendance successfully recorded!", "success");
+                }
+
+                await checkAttendanceStatus();
+            } catch (err) {
+                console.error("Mark attendance error:", err);
+                showToast(err.message || "Failed to mark attendance.", "error");
+            }
+        });
+
+        // ======================= MATERIALS LOGIC =======================
+        async function loadMaterials() {
+            const listEl = document.getElementById('materials-list');
+            const countEl = document.getElementById('materials-count');
+
+            try {
+                const { data: materials, error } = await supabase
+                    .from('materials')
+                    .select('*')
+                    .eq('course_id', courseId)
+                    .order('created_at', { ascending: false });
+
+                if (error) throw error;
+
+                countEl.textContent = `${materials.length} item${materials.length === 1 ? '' : 's'}`;
+
+                if (materials.length === 0) {
+                    listEl.innerHTML = `
+                        <div class="text-center py-8 text-slate-500 text-xs bg-slate-900/40 rounded-xl border border-slate-800">
+                            No course materials uploaded yet.
+                        </div>
+                    `;
+                    return;
+                }
+
+                listEl.innerHTML = '';
+                materials.forEach(mat => {
+                    const row = document.createElement('div');
+                    row.className = "p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between hover:border-slate-700 transition";
+
+                    const dateStr = new Date(mat.created_at).toLocaleDateString(undefined, {
+                        month: 'short', day: 'numeric', year: 'numeric'
+                    });
+
+                    row.innerHTML = `
+                        <div class="flex items-center gap-3 truncate pr-4">
+                            <span class="w-9 h-9 rounded-lg bg-brand-500/10 text-brand-400 flex items-center justify-center font-bold text-xs uppercase flex-shrink-0">
+                                ${escapeHtml(mat.file_type || 'file')}
+                            </span>
+                            <div class="truncate">
+                                <h4 class="text-sm font-semibold text-white truncate">${escapeHtml(mat.title)}</h4>
+                                <span class="text-xs text-slate-500">Uploaded ${dateStr}</span>
+                            </div>
+                        </div>
+                        <button onclick="downloadMaterial('${escapeHtml(mat.file_path)}', '${escapeHtml(mat.title)}')"
+                            class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-brand-600 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition flex-shrink-0">
+                            View / Download
+                        </button>
+                    `;
+                    listEl.appendChild(row);
+                });
+
+            } catch (err) {
+                console.error("Error loading materials:", err);
+                listEl.innerHTML = '<div class="text-rose-400 text-xs py-4 text-center">Failed to load materials.</div>';
+            }
+        }
+
+        async function downloadMaterial(filePath, title) {
+            try {
+                showToast("Generating secure download link...", "info");
+                const { data, error } = await supabase.storage
+                    .from('course-materials')
+                    .createSignedUrl(filePath, 300); // 5 minutes valid
+
+                if (error) throw error;
+                window.open(data.signedUrl, '_blank');
+            } catch (err) {
+                console.error("Signed URL error:", err);
+                showToast("Could not access file. Check storage bucket permissions.", "error");
+            }
+        }
+
+        // ======================= REALTIME CHAT LOGIC =======================
+        async function initRealtimeChat() {
+            const chatContainer = document.getElementById('chat-messages');
+
+            // 1. Fetch recent messages
+            try {
+                const { data: messages, error } = await supabase
+                    .from('chat_messages')
+                    .select('id, message, created_at, sender_id, profiles(name, role)')
+                    .eq('course_id', courseId)
+                    .order('created_at', { ascending: true })
+                    .limit(50);
+
+                if (error) throw error;
+
+                chatContainer.innerHTML = '';
+                if (!messages || messages.length === 0) {
+                    chatContainer.innerHTML = '<div class="text-center py-10 text-xs text-slate-500">No messages yet. Start the conversation!</div>';
+                } else {
+                    messages.forEach(msg => appendMessageUI(msg));
+                    scrollChatToBottom();
+                }
+
+            } catch (err) {
+                console.error("Failed to load chat history:", err);
+                chatContainer.innerHTML = '<div class="text-rose-400 text-xs text-center py-4">Failed to load chat history.</div>';
+            }
+
+            // 2. Subscribe to Supabase Realtime WebSocket Channel
+            chatSubscription = supabase
+                .channel(`chat-course-${courseId}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'chat_messages',
+                        filter: `course_id=eq.${courseId}`
+                    },
+                    async (payload) => {
+                        // Fetch sender details
+                        const { data: sender } = await supabase
+                            .from('profiles')
+                            .select('name, role')
+                            .eq('id', payload.new.sender_id)
+                            .single();
+
+                        const fullMsg = {
+                            ...payload.new,
+                            profiles: sender || { name: 'Unknown', role: 'student' }
+                        };
+
+                        // Remove empty placeholder if any
+                        if (chatContainer.textContent.includes('No messages yet')) {
+                            chatContainer.innerHTML = '';
+                        }
+
+                        appendMessageUI(fullMsg);
+                        scrollChatToBottom();
+                    }
+                )
+                .subscribe((status) => {
+                    console.log(`Supabase Realtime Chat Status for Course ${courseId}:`, status);
+                });
+        }
+
+        function appendMessageUI(msg) {
+            const chatContainer = document.getElementById('chat-messages');
+            const isMe = msg.sender_id === currentStudent.id;
+            const isLecturer = msg.profiles?.role === 'lecturer';
+            const senderName = isMe ? 'You' : (msg.profiles?.name || 'User');
+
+            const timeStr = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'} text-xs`;
+
+            msgDiv.innerHTML = `
+                <div class="flex items-center gap-1.5 mb-1 text-[11px] text-slate-400">
+                    <span class="font-semibold ${isMe ? 'text-brand-300' : 'text-slate-300'}">${escapeHtml(senderName)}</span>
+                    ${isLecturer ? '<span class="px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold">Lecturer</span>' : ''}
+                    <span>&bull;</span>
+                    <span>${timeStr}</span>
+                </div>
+                <div class="px-4 py-2.5 rounded-2xl max-w-[85%] break-words ${
+                    isMe
+                        ? 'bg-brand-600 text-white rounded-tr-none'
+                        : isLecturer
+                            ? 'bg-indigo-950/70 border border-indigo-700/50 text-indigo-100 rounded-tl-none'
+                            : 'bg-slate-700/80 text-slate-200 rounded-tl-none'
+                }">
+                    ${escapeHtml(msg.message)}
+                </div>
+            `;
+
+            chatContainer.appendChild(msgDiv);
+        }
+
+        function scrollChatToBottom() {
+            const chatContainer = document.getElementById('chat-messages');
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        document.getElementById('chat-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+
+            input.value = '';
+
+            try {
+                const { error } = await supabase
+                    .from('chat_messages')
+                    .insert({
+                        course_id: courseId,
+                        sender_id: currentStudent.id,
+                        message: message
+                    });
+
+                if (error) throw error;
+            } catch (err) {
+                console.error("Error sending message:", err);
+                showToast("Failed to send message.", "error");
+            }
+        });
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        initCoursePage();
+    </script>
+</body>
+
+</html>

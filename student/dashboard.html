@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Dashboard | Lite-LMS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    </style>
+</head>
+
+<body class="h-full bg-slate-900 text-slate-100 flex flex-col justify-between selection:bg-brand-500 selection:text-white">
+
+    <!-- Top Navigation -->
+    <nav class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-400 flex items-center justify-center font-bold text-white shadow">
+                    L
+                </div>
+                <span class="font-extrabold text-lg text-white">Lite-LMS <span class="text-xs font-normal text-slate-400">| Student Portal</span></span>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <div class="text-right hidden sm:block">
+                    <p id="nav-user-name" class="text-sm font-semibold text-white">Loading...</p>
+                    <p id="nav-user-meta" class="text-xs text-slate-400">Student</p>
+                </div>
+                <button onclick="logout()" class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 hover:text-white text-slate-300 transition">
+                    Log out
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-6 py-10 flex-grow w-full">
+        <!-- Welcome Banner -->
+        <div class="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">My Courses</h1>
+                <p class="text-sm text-slate-400 mt-1">Access lecture materials, live course discussions, and timed attendance</p>
+            </div>
+            <div id="student-badge" class="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-300">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span id="badge-matric">-</span> &bull; <span id="badge-level">-</span>
+            </div>
+        </div>
+
+        <!-- Loading Skeleton -->
+        <div id="loading-state" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="h-44 rounded-2xl bg-slate-800/40 border border-slate-700/50 animate-pulse"></div>
+            <div class="h-44 rounded-2xl bg-slate-800/40 border border-slate-700/50 animate-pulse"></div>
+            <div class="h-44 rounded-2xl bg-slate-800/40 border border-slate-700/50 animate-pulse"></div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="empty-state" class="hidden text-center py-16 px-6 bg-slate-800/30 border border-slate-800 rounded-2xl">
+            <div class="w-16 h-16 rounded-2xl bg-slate-800 text-slate-400 flex items-center justify-center text-3xl mx-auto mb-4">
+                📚
+            </div>
+            <h3 class="text-lg font-bold text-white mb-1">No Enrolled Courses Found</h3>
+            <p class="text-sm text-slate-400 max-w-md mx-auto">
+                You are not registered in any course yet. Please provide your matriculation number (<span id="empty-matric" class="font-mono text-brand-400">...</span>) to your lecturer to enroll you.
+            </p>
+        </div>
+
+        <!-- Courses Grid -->
+        <div id="courses-grid" class="hidden grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Dynamic Cards Injected Here -->
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 py-6 text-center text-xs text-slate-500">
+        Lite-LMS &bull; Student Environment
+    </footer>
+
+    <script src="../js/config.js"></script>
+    <script src="../js/auth.js"></script>
+    <script>
+        let currentStudentProfile = null;
+
+        async function initDashboard() {
+            const authData = await requireAuth('student');
+            if (!authData) return;
+
+            currentStudentProfile = authData.profile;
+
+            // Update UI with student details
+            document.getElementById('nav-user-name').textContent = currentStudentProfile.name;
+            document.getElementById('nav-user-meta').textContent = `${currentStudentProfile.matric_no || 'Student'} • ${currentStudentProfile.departments?.name || ''}`;
+            document.getElementById('student-badge').classList.remove('hidden');
+            document.getElementById('badge-matric').textContent = currentStudentProfile.matric_no || 'No Matric';
+            document.getElementById('badge-level').textContent = `${currentStudentProfile.level || '100'} Level`;
+            document.getElementById('empty-matric').textContent = currentStudentProfile.matric_no || 'your matric number';
+
+            await loadCourses();
+        }
+
+        async function loadCourses() {
+            const loadingState = document.getElementById('loading-state');
+            const emptyState = document.getElementById('empty-state');
+            const coursesGrid = document.getElementById('courses-grid');
+
+            try {
+                // Fetch enrollments with related course details
+                const { data: enrollments, error } = await supabase
+                    .from('enrollments')
+                    .select(`
+                        id,
+                        course_id,
+                        courses (
+                            id,
+                            code,
+                            title,
+                            level,
+                            department_id,
+                            departments (name),
+                            lecturer_id,
+                            profiles (name),
+                            materials (count)
+                        )
+                    `)
+                    .eq('student_id', currentStudentProfile.id);
+
+                if (error) throw error;
+
+                loadingState.classList.add('hidden');
+
+                if (!enrollments || enrollments.length === 0) {
+                    emptyState.classList.remove('hidden');
+                    return;
+                }
+
+                coursesGrid.innerHTML = '';
+                enrollments.forEach(item => {
+                    const course = item.courses;
+                    if (!course) return;
+
+                    const materialCount = course.materials?.[0]?.count || 0;
+                    const lecturerName = course.profiles?.name || 'Instructor';
+                    const deptName = course.departments?.name || '';
+
+                    const card = document.createElement('a');
+                    card.href = `course.html?id=${course.id}`;
+                    card.className = "group block p-6 rounded-2xl bg-slate-800/40 border border-slate-700/60 hover:border-brand-500/60 hover:bg-slate-800/80 transition duration-200 transform hover:-translate-y-1 shadow-lg";
+
+                    card.innerHTML = `
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="font-extrabold text-lg text-white group-hover:text-brand-400 transition">${escapeHtml(course.code)}</span>
+                            <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-700/70 text-slate-300 border border-slate-600/50">
+                                ${escapeHtml(course.level)} Lvl
+                            </span>
+                        </div>
+                        <h3 class="font-bold text-slate-200 line-clamp-1 mb-2 group-hover:text-white transition">${escapeHtml(course.title)}</h3>
+                        <p class="text-xs text-slate-400 mb-4 flex items-center gap-1.5">
+                            <span>👨‍🏫 ${escapeHtml(lecturerName)}</span>
+                        </p>
+                        <div class="pt-4 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-400">
+                            <span class="truncate max-w-[130px]">${escapeHtml(deptName)}</span>
+                            <span class="flex items-center gap-1 font-medium text-slate-300">
+                                📁 ${materialCount} ${materialCount === 1 ? 'material' : 'materials'}
+                            </span>
+                        </div>
+                    `;
+
+                    coursesGrid.appendChild(card);
+                });
+
+                coursesGrid.classList.remove('hidden');
+
+            } catch (err) {
+                console.error("Error loading courses:", err);
+                loadingState.classList.add('hidden');
+                showToast("Failed to fetch enrolled courses", "error");
+            }
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        initDashboard();
+    </script>
+</body>
+
+</html>
